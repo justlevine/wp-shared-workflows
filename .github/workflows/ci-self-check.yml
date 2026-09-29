@@ -48,8 +48,5 @@ jobs:
       - name: Run actionlint
         run: actionlint -color .github/workflows/*.yml examples/*.yml
 
-      - name: Install yq
-        run: sudo apt-get update && sudo apt-get install -y yq
-
       - name: Verify examples match the workflows they call
         run: bin/check-workflows.sh
