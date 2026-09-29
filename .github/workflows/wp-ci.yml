@@ -87,7 +87,7 @@ permissions:
 jobs:
   validate-inputs:
     name: Validate inputs
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted]
     outputs:
       # Children must consume this, NOT inputs.working-dir: an unnormalised "" or
       # "./themes/foo" breaks cache-dependency-path and defeats artifact-gate's anchor.

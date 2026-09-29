@@ -110,7 +110,7 @@ on:
 jobs:
   discover:
     name: Resolve build targets
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted]
     permissions:
       contents: read
     outputs:
@@ -292,7 +292,7 @@ jobs:
   build:
     name: Build ${{ matrix.name }}
     needs: [discover]
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted]
     timeout-minutes: 30
     # Read-only on purpose: this job runs third-party dependency code, so it must never hold a
     # writable token. Only publish does, and it runs no dependency code.
@@ -416,7 +416,7 @@ jobs:
   publish:
     name: Publish to ${{ inputs.target-branch }}
     needs: [discover, build]
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted]
     timeout-minutes: 10
     permissions:
       contents: write

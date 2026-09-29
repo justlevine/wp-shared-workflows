@@ -44,7 +44,7 @@ permissions:
 jobs:
   deploy:
     name: Deploy to WordPress.org
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted]
     steps:
       # Needed so the 10up action can read assets-path from the workspace; the
       # plugin files themselves come from the downloaded artifact (BUILD_DIR).

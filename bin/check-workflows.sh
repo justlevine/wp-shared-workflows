@@ -8,8 +8,8 @@
 #   4. Repo conventions: kebab-case input names, every input documented, every step named,
 #      and no caller value interpolated into a `run:` body.
 #
-# Requires: yq (v4) and jq. Both are preinstalled on GitHub's ubuntu runners;
-# locally, `brew install yq jq`.
+# Requires: python3 (with PyYAML) and jq. Both are preinstalled on GitHub's
+# ubuntu runners; locally, `brew install jq` and `pip install pyyaml`.
 # Run from anywhere: bin/check-workflows.sh
 
 set -euo pipefail
@@ -30,14 +30,19 @@ err() {
   fail=1
 }
 
-for tool in yq jq; do
+for tool in python3 jq; do
   command -v "$tool" >/dev/null 2>&1 || {
-    echo "$tool is required but not installed — brew install yq jq" >&2
+    echo "$tool is required but not installed" >&2
     exit 127
   }
 done
 
-as_json() { yq -o=json '.' "$1"; }
+as_json() { python3 -c "
+import yaml,json,sys
+class StrLoader(yaml.SafeLoader):pass
+StrLoader.add_constructor('tag:yaml.org,2002:bool',lambda l,n:l.construct_scalar(n))
+json.dump(yaml.load(open(sys.argv[1]),Loader=StrLoader),sys.stdout)
+" "$1"; }
 
 # --- 1. one example per workflow, one workflow per example -------------------
 

@@ -40,7 +40,7 @@ permissions:
 jobs:
   test-php:
     name: PHPUnit
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted]
     # Pin the wp-env container's PHP/WordPress core via env: (not $GITHUB_ENV, which is
     # newline-injectable) at job scope, so start/run/stop resolve the same environment.
     # An empty WP_ENV_CORE is ignored by wp-env (falls back to the consumer's .wp-env.json).
