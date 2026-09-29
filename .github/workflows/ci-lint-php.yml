@@ -46,7 +46,7 @@ permissions:
 jobs:
   lint-php:
     name: Lint PHP
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted]
     defaults:
       run:
         working-directory: ${{ inputs.working-dir }}
