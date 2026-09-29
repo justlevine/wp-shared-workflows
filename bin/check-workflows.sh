@@ -37,7 +37,12 @@ for tool in python3 jq; do
   }
 done
 
-as_json() { python3 -c "import yaml,json,sys; json.dump(yaml.safe_load(open(sys.argv[1])),sys.stdout)" "$1"; }
+as_json() { python3 -c "
+import yaml,json,sys
+class StrLoader(yaml.SafeLoader):pass
+StrLoader.add_constructor('tag:yaml.org,2002:bool',lambda l,n:l.construct_scalar(n))
+json.dump(yaml.load(open(sys.argv[1]),Loader=StrLoader),sys.stdout)
+" "$1"; }
 
 # --- 1. one example per workflow, one workflow per example -------------------
 
