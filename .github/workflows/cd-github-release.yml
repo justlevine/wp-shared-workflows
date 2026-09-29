@@ -1,0 +1,183 @@
+name: CD / GitHub Release
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: "Tag that triggered the release, e.g. v1.2.3."
+        type: string
+        required: true
+      artifact-name:
+        description: >-
+          Name of the build artifact to download and attach. Must match the name used by the
+          producing job (e.g. ci-build.yml's artifact-name). Packaged into a single <slug>.zip unless
+          the artifact is exactly one archive (.zip/.tar.gz/.tgz/.tar.bz2/.tar.xz/.tar), which is
+          attached as-is.
+        type: string
+        required: true
+      slug:
+        description: >-
+          Directory name at the root of the packaged zip, e.g. 'acme-blocks', so the asset installs
+          straight through wp-admin. Letters, digits, dots, underscores and hyphens only, and not
+          leading with '-'. Defaults to artifact-name. Ignored when the artifact is already a single
+          archive.
+        type: string
+        default: ""
+      changelog-path:
+        description: "Path to the changelog whose matching section becomes the release body."
+        type: string
+        default: "CHANGELOG.md"
+      draft:
+        description: "Create the GitHub Release as a draft."
+        type: boolean
+        default: false
+      prerelease:
+        description: "Mark the GitHub Release as a prerelease."
+        type: boolean
+        default: false
+      working-dir:
+        description: >-
+          Directory the project lives in, relative to the repo root. A path prefix, not a working
+          directory: it prefixes changelog-path only. The attached files come from the artifact,
+          already scoped by its build.
+        type: string
+        default: "."
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Download release artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: artifact
+
+      - name: Extract changelog section
+        id: notes
+        shell: bash
+        env:
+          TAG: ${{ inputs.tag }}
+          CHANGELOG_PATH: ${{ inputs.changelog-path }}
+          WORKING_DIR: ${{ inputs.working-dir }}
+        run: |
+          set -euo pipefail
+
+          # working-dir is a path prefix, not a cwd: only the changelog is read from the source.
+          # Without it a monorepo silently picks up the ROOT changelog, which still parses.
+          dir="${WORKING_DIR:-.}"; dir="${dir#./}"; dir="${dir%/}"; [ -n "$dir" ] || dir="."
+          # Reject traversal — this file's contents become the public Release body.
+          case "$dir" in
+            /*)   echo "::error::working-dir must be relative to the repo root (got '$WORKING_DIR')"; exit 1 ;;
+            *..*) echo "::error::working-dir must not contain '..' (got '$WORKING_DIR')"; exit 1 ;;
+          esac
+          case "$CHANGELOG_PATH" in
+            /*)   echo "::error::changelog-path must be relative to working-dir (got '$CHANGELOG_PATH')"; exit 1 ;;
+            *..*) echo "::error::changelog-path must not contain '..' (got '$CHANGELOG_PATH')"; exit 1 ;;
+          esac
+          if [ "$dir" != "." ]; then
+            CHANGELOG_PATH="${dir}/${CHANGELOG_PATH#./}"
+          fi
+
+          if [ ! -f "$CHANGELOG_PATH" ]; then
+            echo "::error::Changelog not found at '$CHANGELOG_PATH'"
+            exit 1
+          fi
+          ver="${TAG#v}"
+          # Capture the body under the heading whose first token matches the tag's
+          # version, tolerating "## v1.2.3", "## 1.2.3", "## [1.2.3]", "## [v1.2.3]"
+          # and an optional trailing " - date". Exact token compare keeps "## Unreleased"
+          # and "## v1.2.30" from matching "v1.2.3".
+          awk -v ver="$ver" '
+            /^## / {
+              if (capture) { exit }
+              line = $0
+              sub(/^##[ \t]+/, "", line)
+              split(line, parts, /[ \t]+/)
+              head = parts[1]
+              gsub(/^\[|\]$/, "", head)
+              sub(/^v/, "", head)
+              if (head == ver) { capture = 1 }
+              next
+            }
+            capture { print }
+          ' "$CHANGELOG_PATH" > release-notes.md
+          if ! grep -q '[^[:space:]]' release-notes.md; then
+            echo "::error::No changelog section found for $TAG in $CHANGELOG_PATH"
+            exit 1
+          fi
+
+      - name: Package release asset
+        id: asset
+        shell: bash
+        env:
+          ARTIFACT_NAME: ${{ inputs.artifact-name }}
+          SLUG: ${{ inputs.slug != '' && inputs.slug || inputs.artifact-name }}
+        run: |
+          set -euo pipefail
+          # dotglob so a plugin's .htaccess/.editorconfig is counted and packaged; bash's dotglob
+          # never matches '.' or '..', so the entry count stays honest.
+          shopt -s nullglob dotglob
+          entries=(artifact/*)
+          if [ ${#entries[@]} -eq 0 ]; then
+            echo "::error::Downloaded artifact '$ARTIFACT_NAME' contains no files to attach"
+            exit 1
+          fi
+          # A newline in a name would inject extra keys when the asset is written to $GITHUB_OUTPUT.
+          case "${entries[*]}" in
+            *$'\n'*) echo "::error::Artifact '$ARTIFACT_NAME' contains a file whose name has a newline"; exit 1 ;;
+          esac
+
+          # Already packaged by the build (artifact-path: dist/foo.zip) — attach it untouched.
+          if [ ${#entries[@]} -eq 1 ] && [ -f "${entries[0]}" ]; then
+            lower="$(printf '%s' "${entries[0]}" | tr '[:upper:]' '[:lower:]')"
+            case "$lower" in
+              *.zip|*.tar.gz|*.tgz|*.tar.bz2|*.tar.xz|*.tar)
+                echo "::notice::Attaching '${entries[0]}' as-is (already an archive)."
+                echo "asset=${entries[0]}" >> "$GITHUB_OUTPUT"
+                exit 0
+                ;;
+            esac
+          fi
+
+          # Directory artifact: gh release create only accepts files, and a WordPress zip must carry
+          # a single <slug>/ root for wp-admin -> Upload Plugin to install it. Re-root, then zip.
+          # Restricted charset: the slug becomes a directory, an archive name and a $GITHUB_OUTPUT
+          # value, and a leading '-' would reach gh release create as a flag rather than a path.
+          case "$SLUG" in
+            -*|*[!a-zA-Z0-9._-]*|.|..|"")
+              echo "::error::slug must be letters, digits, dots, underscores or hyphens, and must not start with '-' (got '$SLUG')"
+              exit 1
+              ;;
+          esac
+          mkdir -p "pkg/$SLUG"
+          cp -R artifact/. "pkg/$SLUG/"
+          ( cd pkg && zip -qr "../${SLUG}.zip" "$SLUG" )
+          echo "::notice::Packaged ${#entries[@]} top-level entries into ${SLUG}.zip (root: ${SLUG}/)."
+          echo "asset=${SLUG}.zip" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          ASSET: ${{ steps.asset.outputs.asset }}
+          DRAFT: ${{ inputs.draft }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          set -euo pipefail
+          args=(release create "$TAG" "$ASSET" --verify-tag --title "$TAG" --notes-file release-notes.md)
+          if [ "$DRAFT" = "true" ]; then
+            args+=(--draft)
+          fi
+          if [ "$PRERELEASE" = "true" ]; then
+            args+=(--prerelease)
+          fi
+          gh "${args[@]}"
