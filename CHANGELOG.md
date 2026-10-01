@@ -10,6 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Every reusable workflow takes its runner from a new `runs-on` input (JSON: a label or a list of labels), defaulting to GitHub-hosted `"ubuntu-latest"`, and `wp-ci.yml` and `wp-cd.yml` forward it to every workflow they call. Hard-coding `[self-hosted]` left public callers (and this public repository's own CI) queued with no runner, since a reusable workflow's jobs run in the calling repository. rtCamp's private repositories pass `'["self-hosted"]'`, as the org runner policy requires. `ci-self-check.yml` runs on `ubuntu-latest`, and `bin/check-workflows.sh` now requires reusable workflows to use and forward the input instead of checking a label allow-list.
 
+### Fixed
+
+- `ci-lint-css.yml` no longer passes `package.json` and `package-lock.json` to Stylelint. `ci-detect-changes` lists them in `css-files` so that a dependency change re-runs the job, and Stylelint failed on them with `CssSyntaxError`. When `changed-files` holds anything other than stylesheets, or is empty, the job now runs `lint-command` over the whole project.
+- `ci-lint-php.yml` no longer passes deleted files or non-PHP files to PHPCS. `ci-detect-changes` lists `composer.json`, `composer.lock` and the PHPStan config in `php-files`, and a change that deletes PHP files lists them too, so PHPCS failed with `does not exist` or `Start tag expected`. Changed PHP files that still exist are linted file by file; if the list holds anything else, PHPCS lints the whole project.
+
 ## v1.0.0 - 2026-09-30
 
 First tagged release. Consumers pin `@v1`.
