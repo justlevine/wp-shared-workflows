@@ -21,7 +21,7 @@ single job starts. Treat the input surface as stable.
 There is nothing to build. Install the linters once:
 
 ```bash
-brew install actionlint yq jq        # or your platform's equivalent
+brew install actionlint yq jq pipx   # or your platform's equivalent
 ```
 
 ## Before you open a PR
@@ -48,7 +48,7 @@ caller at your branch.
 
 ## Pull request checklist
 
-- [ ] Branch is `<version>/task/<kebab-slug>`, based on the active release branch.
+- [ ] Branch is `<version>/task/<kebab-slug>`, based on `main`.
 - [ ] The three commands above pass locally.
 - [ ] Every new or changed input has a `description:`.
 - [ ] `examples/<workflow>.yml` added or updated to match.
