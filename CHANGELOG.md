@@ -4,6 +4,12 @@ All notable changes to `@rtcamp/wp-shared-workflows` are documented in this file
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased
+
+### Changed
+
+- Every reusable workflow takes its runner from a new `runs-on` input (JSON: a label or a list of labels), defaulting to GitHub-hosted `"ubuntu-latest"`, and `wp-ci.yml` and `wp-cd.yml` forward it to every workflow they call. Hard-coding `[self-hosted]` left public callers (and this public repository's own CI) queued with no runner, since a reusable workflow's jobs run in the calling repository. rtCamp's private repositories pass `'["self-hosted"]'`, as the org runner policy requires. `ci-self-check.yml` runs on `ubuntu-latest`, and `bin/check-workflows.sh` now requires reusable workflows to use and forward the input instead of checking a label allow-list.
+
 ## v1.0.0 - 2026-09-30
 
 First tagged release. Consumers pin `@v1`.
