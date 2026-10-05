@@ -106,7 +106,7 @@ Use `bash -eo pipefail -c`, never bare `bash -c`: `-e` is not inherited, so a ba
 - **Everything gated on what changed**: `ci-detect-changes.yml` buckets the diff and every downstream job keys off it, so a docs-only PR runs almost nothing.
 - **Logic that needs a real language lives elsewhere**: `@rtcamp/wp-tooling`, invoked as `npx wp-tooling <command>`. Repo-local automation is Bash under `bin/`.
 - **Examples are executable documentation**: one per workflow, verified in CI, comment-free, pinned `@v1`. They target a `wp-content`-shaped monorepo because that is the shape people get wrong. Anything consuming a build artifact shows the producing `ci-build` job and the `needs:` edge in the same file.
-- **Releases are cut by release-please**: `release.yml` reads the Conventional Commit subjects merged to `main`, keeps a release PR open that bumps `.release-please-manifest.json` and writes `CHANGELOG.md`, and merging that PR tags `vX.Y.Z` and publishes the GitHub Release. The same workflow then moves the `vX` and `vX.Y` alias tags consumers pin. `fix:` is a patch, `feat:` a minor, `feat!:` or a `BREAKING CHANGE:` footer a major. Dependabot commits action bumps as `fix(deps):`, so each squash-merged bump ships as a patch release.
+- **Releases are cut by release-please**: `release.yml` reads the Conventional Commit subjects merged to `main`, keeps a release PR open that bumps `.release-please-manifest.json` and writes `CHANGELOG.md`, and merging that PR tags `vX.Y.Z` and publishes the GitHub Release.
 - **Prefer official tooling**: `actions/checkout`, `actions/setup-node`, `shivammathur/setup-php`, and WordPress/Automattic-maintained actions over third-party ones.
 
 ## Common pitfalls
@@ -118,13 +118,12 @@ Use `bash -eo pipefail -c`, never bare `bash -c`: `-e` is not inherited, so a ba
 - `actionlint` shells out to whatever `shellcheck` is on `PATH`, and rule behaviour differs between shellcheck releases — a local pass does not guarantee a CI pass. Write shell that is clean on older versions too: prefer `guard || continue` and explicit `if` blocks over `A && B || C`, which SC2015 flags on shellcheck 0.10 and earlier.
 - A green `bin/check-workflows.sh` proves input *names* are right, not input *values*. A wrong `build-command` or `artifact-path` only surfaces in a real consumer run.
 - Never hand-edit `CHANGELOG.md` or `.release-please-manifest.json`, and never push a `v*` tag by hand; release-please owns all three. To fix an entry, edit the open release PR.
-- Release PRs and tags created with `GITHUB_TOKEN` do not trigger other workflows, so `ci-self-check.yml` does not run on the release PR. It only touches the changelog and manifest.
 - `cd-github-release.yml` extracts release notes by matching a version heading in `CHANGELOG.md`, and deliberately fails rather than publishing empty notes. Cut `## Unreleased` to `## vX.Y.Z - YYYY-MM-DD` before tagging.
 - Consumers pin `@v1`, never a branch such as `@release/v1.0.0`. A moving ref has already broken real consumer runs mid-change.
 
 ## PR instructions
 
-- GitHub flow: branch off `main`, PR back into `main`. A release is a tag on `main` that release-please cuts; there are no release or milestone branches. Name branches `<type>/<kebab-slug>` (`fix/runs-on-input`). Never commit to `main` directly.
+- GitHub flow: branch off `main`, PR back into `main`. A release is a tag on `main` that release-please cuts. Name branches `<type>/<kebab-slug>` (`fix/runs-on-input`). Never commit to `main` directly.
 - [Conventional Commits](https://www.conventionalcommits.org/) for the PR title: `feat(ci): Add lint-css workflow`.
 - Ensure the Code quality commands pass, the caller example is updated alongside the workflow, and the PR title says what changed for a consumer — see `CONTRIBUTING.md` for the full checklist.
 - Ask first before removing or renaming an input, adding a deploy target, or granting a job `contents: write` it does not already need.
